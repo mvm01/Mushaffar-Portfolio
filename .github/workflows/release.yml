@@ -1,0 +1,71 @@
+name: Release Desktop Builds
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: --bundles nsis --target x86_64-pc-windows-msvc
+          - platform: macos-latest
+            args: --bundles dmg
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust toolchain
+        if: matrix.platform != 'windows-latest'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust toolchain for Windows x64
+        if: matrix.platform == 'windows-latest'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Generate app icons
+        run: npm run tauri icon ./src-tauri/icons/app-icon.png
+
+      - name: Build Tauri app and draft release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: __VERSION__
+          releaseName: Local Data Manager v__VERSION__
+          releaseBody: |
+            Desktop builds for Local Data Manager.
+
+            Assets:
+            - Windows NSIS installer
+            - macOS DMG bundle
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
