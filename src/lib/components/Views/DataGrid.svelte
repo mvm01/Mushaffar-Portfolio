@@ -4,7 +4,7 @@
 
   export let records: UserRecord[] = [];
   export let loading = false;
-  export let selectedId: number | null = null;
+  export let selectedId: string | null = null;
   export let onInspect: (record: UserRecord) => void = () => {};
   export let pageSize = 25;
 
@@ -87,7 +87,7 @@
                   </div>
                   <div>
                     <p class="font-medium text-white">{record.name}</p>
-                    <p class="text-xs uppercase tracking-[0.24em] text-slate-500">UID-{record.id.toString().padStart(3, '0')}</p>
+                    <p class="text-xs uppercase tracking-[0.24em] text-slate-500">{record.id}</p>
                   </div>
                 </div>
               </td>

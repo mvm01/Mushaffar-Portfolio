@@ -1,48 +1,28 @@
 # Local Data Manager
 
-Local Data Manager is a desktop-first portfolio application built with Tauri v2, Svelte 5, TailwindCSS, and Rust. It was created as part of a broader product ecosystem and grew out of a very practical need: managing sensitive local operational data, including credentials and environment-level assets, in a cleaner and more intentional way.
+Local Data Manager is a desktop-first portfolio application built with Tauri v2, Svelte 5, TailwindCSS, and Rust. It started as a UI-forward prototype for handling sensitive local operational data and has evolved into a local-first desktop workspace with secure auth, encrypted local persistence, customer sync flows, and a loopback integration API.
 
-This repository currently focuses on the desktop experience, interaction design, and local-first workflow. It is intentionally scoped as a polished UI prototype with mock data and basic local state management. It does not yet implement real encryption, remote sync, or production-grade secrets handling.
+This repository is part of a broader ecosystem that also includes:
 
-## Why This Exists
+- a consulting-facing Avtaja web platform
+- a mobile-connected local agent layer
+- a larger compliance-oriented backend agent
 
-This app sits alongside a wider ecosystem of related projects:
+Within that ecosystem, this repository is the desktop operator surface.
 
-- a consulting-facing web platform for the Avtaja brand
-- a mobile-connected agent layer used to bridge into local machine workflows
-- a larger compliance-oriented backend agent responsible for heavier automation and policy logic
+## What It Does
 
-Within that ecosystem, this repository represents the desktop surface: a local operator dashboard for reviewing records, navigating activity, and shaping the UX of a future local data and credential management workflow.
+The current app includes:
 
-In short, this is the desktop-facing interface for a bigger vision.
-
-## Current Scope
-
-This project is currently optimized as a portfolio-quality desktop prototype with:
-
-- a mock login flow
-- a local dashboard with multiple views
-- analytics and audit-style presentation panels
-- record inspection and pagination
-- packaging for Windows and macOS distribution
-
-It intentionally does not include:
-
-- real encryption
-- cloud key management
-- production authentication
-- external API integrations
-
-## Product Positioning
-
-The easiest way to think about this repository is:
-
-- web app: public and consulting-facing surface
-- desktop app: local operator workspace
-- mobile agent: bridge into local device workflows
-- compliance agent: backend automation and policy engine
-
-That makes this repo a useful standalone portfolio piece, but it is even stronger when presented as one component in a connected multi-surface system.
+- operator setup and unlock flow
+- Argon2-hashed master password storage
+- one-time recovery key generation and password reset flow
+- encrypted external API token storage
+- SQLCipher-backed local SQLite persistence
+- local customer cache and cloud sync command flow
+- polished multi-view desktop dashboard UI
+- loopback-only local API for other apps on the same machine
+- Windows and macOS packaging workflow
 
 ## Tech Stack
 
@@ -50,7 +30,10 @@ That makes this repo a useful standalone portfolio piece, but it is even stronge
 - Svelte 5 + TypeScript
 - Vite
 - TailwindCSS
-- Rust + rusqlite
+- Rust
+- `rusqlite` with bundled SQLCipher
+- `reqwest`
+- `axum`
 
 ## Local Development
 
@@ -60,58 +43,138 @@ Install dependencies:
 npm install
 ```
 
-Run the desktop app in development:
+Start the app:
 
 ```bash
 npm run tauri dev
 ```
 
-On Windows PowerShell, use `npm.cmd` if script execution blocks `npm`:
+On Windows PowerShell, use `npm.cmd` if execution policy blocks `npm`:
 
 ```powershell
 npm.cmd install
 npm.cmd run tauri dev
 ```
 
-## Project Highlights
+### Windows Tooling Note
 
-- Dark-mode desktop UI with a polished dashboard layout
-- Sidebar-driven multi-view navigation
-- Searchable records grid with pagination
-- Detail drawer and mock audit timeline
-- Analytics section designed for presentation and product storytelling
-- Local SQLite bootstrap on the Rust side
-- Tauri IPC used for mock record generation
+Because this project uses bundled SQLCipher on Windows, the Rust build may require:
+
+- `clang`
+- `perl`
+- Developer PowerShell for Visual Studio
+
+If standard PowerShell cannot build the Rust side, use `Developer PowerShell for Visual Studio`.
+
+## Runtime Environment
+
+The app expects these runtime values during development:
+
+- `LDM_TOKEN_CIPHER_KEY`
+  - base64 text that decodes to exactly 32 bytes
+  - used to encrypt and decrypt the stored external API token
+- `LDM_SQLCIPHER_KEY`
+  - passphrase used by SQLCipher for the local database
+- `LDM_LOCAL_API_PORT`
+  - optional
+  - defaults to `18432`
+
+The local integration API key is no longer provided by environment variable. It is generated and revoked from inside the app and stored as a hash in the local database.
+
+### PowerShell Example
+
+A starter file is included at [run-local.example.ps1](C:\Users\subsu\Documents\Mushaffar-Portfolio\run-local.example.ps1).
+
+Copy the values you want to keep locally, then run:
+
+```powershell
+.\run-local.example.ps1
+```
+
+## Secure Workspace Features
+
+### Operator Auth
+
+- operator account stored locally
+- master password hashed with Argon2
+- unlock flow handled through Tauri IPC
+
+### Recovery Flow
+
+- one-time recovery key generated during first setup
+- recovery key shown once
+- password reset available from `Forgot password?`
+- if both password and recovery key are lost, the current fallback is a destructive local reset
+
+### Local Storage
+
+- local SQLite database at runtime
+- SQLCipher enabled through `rusqlite`
+- external CRM/API token encrypted before persistence
+
+## Local API
+
+The app exposes a loopback-only HTTP API on:
+
+- `127.0.0.1`
+- default port: `18432`
+
+Routes:
+
+- `GET /health`
+- `GET /v1/operator`
+- `GET /v1/customers`
+- `POST /v1/customers/sync`
+
+### Local API Security Model
+
+- loopback-only binding
+- bearer-token protected
+- integration key generated from the Settings screen
+- only the hashed form of the key is stored locally
+- full key is shown once after generation
+
+### Local API Usage
+
+Generate or rotate the key from the Settings screen, then use the built-in curl examples or commands like:
+
+```powershell
+curl.exe -H "Authorization: Bearer YOUR_GENERATED_KEY" http://127.0.0.1:18432/v1/customers
+```
+
+```powershell
+curl.exe -X POST -H "Authorization: Bearer YOUR_GENERATED_KEY" http://127.0.0.1:18432/v1/customers/sync
+```
 
 ## Packaging
 
-### Generate app icons
+### Generate App Icons
 
-Use a square PNG or SVG source icon. The current project icon source is:
+Use the source icon at:
 
 - `src-tauri/icons/app-icon.png`
 
-Generate platform icons with:
+Generate platform icons:
 
 ```bash
 npm run tauri icon ./src-tauri/icons/app-icon.png
 ```
 
-On Windows PowerShell, use:
+On Windows PowerShell:
 
 ```powershell
 npm.cmd run tauri icon .\src-tauri\icons\app-icon.png
 ```
 
-### Windows installers
+### Windows Installers
 
-Tauri can build different Windows targets depending on the Rust target triple:
+Targets:
 
-- `aarch64-pc-windows-msvc`: Windows ARM64
-- `x86_64-pc-windows-msvc`: Windows x64
-- `i686-pc-windows-msvc`: Windows x86 (32-bit)
+- `aarch64-pc-windows-msvc`
+- `x86_64-pc-windows-msvc`
+- `i686-pc-windows-msvc`
 
-Install the target you want first:
+Install targets:
 
 ```powershell
 rustup target add aarch64-pc-windows-msvc
@@ -131,113 +194,80 @@ Build x64:
 npm.cmd run tauri build -- --target x86_64-pc-windows-msvc --bundles nsis
 ```
 
-Build x86 (32-bit):
+Build x86:
 
 ```powershell
 npm.cmd run tauri build -- --target i686-pc-windows-msvc --bundles nsis
 ```
 
-Generated installers are placed under:
+Output:
 
 - `src-tauri/target/<target-triple>/release/bundle/nsis/`
 
-Examples:
-
-- `src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/`
-- `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`
-- `src-tauri/target/i686-pc-windows-msvc/release/bundle/nsis/`
-
 ### macOS DMG
 
-Build the DMG on a Mac. Tauri's DMG bundling is macOS-based.
-
-1. Install Node.js, Rust, and Xcode Command Line Tools on the Mac.
-2. Copy this project to the Mac.
-3. Install dependencies:
+Build on a Mac:
 
 ```bash
 npm install
-```
-
-4. Generate icons:
-
-```bash
 npm run tauri icon ./src-tauri/icons/app-icon.png
-```
-
-5. Build the DMG:
-
-```bash
 npm run tauri build -- --bundles dmg
 ```
 
-The DMG output will be under:
+Output:
 
 - `src-tauri/target/release/bundle/dmg/`
 
-### Notes
-
-- Unsigned Windows installers may show SmartScreen warnings.
-- Unsigned macOS apps may show Gatekeeper warnings.
-- For public distribution, add code signing for Windows and code signing plus notarization for macOS.
-
 ## GitHub Releases
 
-This repository now includes a GitHub Actions workflow at:
+This repo includes:
 
-- `.github/workflows/release.yml`
+- [.github/workflows/release.yml](C:\Users\subsu\Documents\Mushaffar-Portfolio\.github\workflows\release.yml)
 
-It creates:
+It builds:
 
 - Windows x64 NSIS installers
 - macOS DMG bundles
 
-### How to trigger it
-
-You can trigger the workflow in either of these ways:
-
-1. Run it manually from the GitHub Actions tab with `workflow_dispatch`.
-2. Push a version tag such as:
+Trigger it by pushing a version tag:
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The workflow creates a draft GitHub Release and uploads the generated installers as release assets.
+If GitHub Actions cannot create the release, enable:
 
-### Important GitHub setting
+- `Repository Settings -> Actions -> General -> Workflow permissions -> Read and write permissions`
 
-If GitHub Actions cannot create releases, go to:
+## Release Checklist
 
-- `Repository Settings -> Actions -> General -> Workflow permissions`
+Before publishing this repo or shipping a demo build:
 
-and enable:
+1. Verify `npm.cmd run tauri dev` starts cleanly from your local setup script.
+2. Test operator setup, unlock, recovery, and sync.
+3. Generate a local API key and confirm:
+   - `/health` works
+   - `/v1/operator` works
+   - `/v1/customers` works
+   - revoking the key invalidates old requests
+4. Regenerate icons if branding changed.
+5. Build the installer or DMG you want to distribute.
+6. Test the packaged app, not just `tauri dev`.
 
-- `Read and write permissions`
+## Current Status
 
-### Recommended release flow
+This repo is no longer just a UI prototype. It is now a local-first desktop portfolio piece with real secure application flows and a small integration surface. It is still demo-scoped in a few important ways:
 
-1. Test locally with `npm run tauri dev`.
-2. Generate icons with `tauri icon`.
-3. Bump the app version in:
-   - `src-tauri/tauri.conf.json`
-   - `package.json` if you want the frontend package version to match
-4. Commit your changes.
-5. Push a tag like `v0.1.0`.
-6. Let GitHub Actions build the installers.
-7. Review the draft release and publish it.
+- the external CRM service is still mock-friendly
+- there is no multi-operator role system yet
+- local API clients do not yet have scoped permissions
+- public distribution still needs signing and notarization work
 
-## Roadmap Direction
+## Natural Next Steps
 
-Natural next steps for this repository would be:
-
-- replacing mock data with real local records
-- introducing secure credential storage flows
-- connecting with the broader agent/compliance ecosystem
-- adding signed production installers
-- refining the desktop information architecture around real operator tasks
-
-## Status
-
-This repository is production-polished from a UI and packaging perspective, but still prototype-scoped from a security and systems-integration perspective.
+- scoped integration clients for the local API
+- create/edit customer forms
+- stronger audit logging
+- signed installers
+- tighter ecosystem integration with the other Avtaja/compliance repos

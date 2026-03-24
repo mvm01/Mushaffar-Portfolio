@@ -6,7 +6,7 @@
   import AuditTimeline from './lib/components/Views/AuditTimeline.svelte';
   import DataGrid from './lib/components/Views/DataGrid.svelte';
   import DetailsDrawer from './lib/components/Views/DetailsDrawer.svelte';
-  import MockLogin from './lib/components/Views/MockLogin.svelte';
+  import AuthPortal from './lib/components/Views/AuthPortal.svelte';
   import SettingsPanel from './lib/components/Views/SettingsPanel.svelte';
   import type { AppView, UserRecord } from './lib/stores/appState';
   import { appState } from './lib/stores/appState';
@@ -30,9 +30,7 @@
   })();
 
   onMount(() => {
-    if (state.isAuthenticated && state.records.length === 0) {
-      void appState.loadRecords();
-    }
+    void appState.initialize();
   });
 
   $: if (filteredRecords.length === 0) {
@@ -43,9 +41,29 @@
     drawerVisible = true;
   }
 
-  async function enterDashboard() {
-    appState.login();
-    await appState.loadRecords();
+  async function setupWorkspace(email: string, password: string, apiToken: string) {
+    try {
+      await appState.setupOperator(email, password, apiToken);
+    } catch (error) {
+      appState.setError(String(error));
+    }
+  }
+
+  async function unlockWorkspace(email: string, password: string) {
+    try {
+      await appState.unlock(email, password);
+    } catch (error) {
+      appState.setError(String(error));
+    }
+  }
+
+  async function recoverWorkspace(email: string, recoveryKey: string, newPassword: string) {
+    try {
+      await appState.resetPasswordWithRecoveryKey(email, recoveryKey, newPassword);
+      appState.setError('Password reset successful. You can now unlock with the new password.');
+    } catch (error) {
+      appState.setError(String(error));
+    }
   }
 
   function inspectRecord(record: UserRecord) {
@@ -59,6 +77,10 @@
 
   function navigateTo(view: AppView) {
     appState.setActiveView(view);
+  }
+
+  function dismissRecoveryKey() {
+    appState.dismissRecoveryKey();
   }
 
   $: viewMeta = {
@@ -95,10 +117,45 @@
   }[state.activeView];
 </script>
 
-{#if !state.isAuthenticated}
-  <MockLogin onContinue={enterDashboard} />
+{#if !state.initialized || (!state.isAuthenticated && !state.operator && state.loading)}
+  <AuthPortal loading={true} />
+{:else if !state.isAuthenticated}
+  <AuthPortal
+    loading={state.loading}
+    hasOperator={state.operator !== null}
+    operatorEmail={state.operator?.email ?? ''}
+    error={state.error}
+    recoveryKey={state.recoveryKey}
+    onSetup={setupWorkspace}
+    onUnlock={unlockWorkspace}
+    onResetPassword={recoverWorkspace}
+  />
 {:else}
   <main class="min-h-screen bg-mesh-gradient px-4 py-4 text-white lg:px-6 lg:py-6">
+    {#if state.recoveryKey}
+      <div class="mx-auto mb-4 max-w-[1600px] rounded-[28px] border border-amber-400/20 bg-amber-400/10 px-5 py-4 text-amber-50 shadow-glow">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p class="text-xs uppercase tracking-[0.28em] text-amber-200/80">Recovery Key</p>
+            <p class="mt-2 text-sm text-amber-100">
+              Save this one-time recovery key now. You can use it later with <span class="font-semibold">Forgot password?</span> on the unlock screen.
+            </p>
+            <p class="mt-3 break-all rounded-2xl border border-amber-300/20 bg-slate-950/40 px-4 py-3 font-mono text-sm text-white">
+              {state.recoveryKey}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            on:click={dismissRecoveryKey}
+            class="inline-flex items-center justify-center rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm font-medium text-amber-50 transition hover:border-amber-200/40 hover:bg-amber-300/15"
+          >
+            I saved it
+          </button>
+        </div>
+      </div>
+    {/if}
+
     <div class="mx-auto grid max-w-[1600px] gap-4 lg:grid-cols-[300px_1fr]">
       <Sidebar records={state.records} activeView={state.activeView} onNavigate={navigateTo} />
 
@@ -111,6 +168,12 @@
           onSearch={(value) => appState.setQuery(value)}
         />
 
+        {#if state.error}
+          <div class="mt-6 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+            {state.error}
+          </div>
+        {/if}
+
         <div class="mt-6 grid gap-4 md:grid-cols-3">
           <div class="rounded-[28px] border border-white/10 bg-slate-950/60 p-5">
             <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Total Records</p>
@@ -121,8 +184,10 @@
             <p class="mt-4 text-4xl font-semibold text-white">{filteredRecords.length}</p>
           </div>
           <div class="rounded-[28px] border border-white/10 bg-gradient-to-br from-cyan-400/20 to-sky-500/10 p-5">
-            <p class="text-sm uppercase tracking-[0.3em] text-cyan-100/70">Storage Mode</p>
-            <p class="mt-4 text-4xl font-semibold text-white">SQLite</p>
+            <p class="text-sm uppercase tracking-[0.3em] text-cyan-100/70">Sync Access</p>
+            <p class="mt-4 text-4xl font-semibold text-white">
+              {state.operator?.has_api_token ? 'Ready' : 'Token'}
+            </p>
           </div>
         </div>
 
@@ -202,7 +267,43 @@
           </div>
         {:else if state.activeView === 'Settings'}
           <div class="mt-6">
-            <SettingsPanel />
+            <SettingsPanel
+              operatorEmail={state.operator?.email ?? ''}
+              hasApiToken={state.operator?.has_api_token ?? false}
+              localApi={state.localApi}
+              generatedLocalApiKey={state.generatedLocalApiKey}
+              loading={state.loading}
+              syncing={state.syncingCustomers}
+              onSaveApiToken={async (token) => {
+                try {
+                  await appState.saveApiToken(token);
+                } catch (error) {
+                  appState.setError(String(error));
+                }
+              }}
+              onSyncCustomers={async () => {
+                try {
+                  await appState.syncCustomers();
+                } catch (error) {
+                  appState.setError(String(error));
+                }
+              }}
+              onGenerateLocalApiKey={async () => {
+                try {
+                  await appState.generateLocalApiKey();
+                } catch (error) {
+                  appState.setError(String(error));
+                }
+              }}
+              onRevokeLocalApiKey={async () => {
+                try {
+                  await appState.revokeLocalApiKey();
+                } catch (error) {
+                  appState.setError(String(error));
+                }
+              }}
+              onDismissGeneratedLocalApiKey={() => appState.dismissGeneratedLocalApiKey()}
+            />
           </div>
         {/if}
       </section>
