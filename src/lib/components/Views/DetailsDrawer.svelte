@@ -40,7 +40,7 @@
     <div class="mt-6 grid gap-4 sm:grid-cols-2">
       <div class="rounded-[28px] border border-white/10 bg-white/[0.04] p-4">
         <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Profile ID</p>
-        <p class="mt-3 text-2xl font-semibold text-white">{record.id}</p>
+        <p class="mt-3 text-2xl font-semibold text-white">UID-{record.id.toString().padStart(3, '0')}</p>
       </div>
       <div class="rounded-[28px] border border-white/10 bg-white/[0.04] p-4">
         <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Status</p>

@@ -42,7 +42,7 @@
     </div>
     {#if record}
       <span class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs uppercase tracking-[0.24em] text-slate-300">
-        {record.id}
+        UID-{record.id.toString().padStart(3, '0')}
       </span>
     {/if}
   </div>
